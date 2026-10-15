@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pius AI</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #0f172a; color: #f8fafc; display: flex; height: 100vh; overflow: hidden; }
+
+        /* Outer Layout */
+        .app-container { display: flex; width: 100vw; height: 100vh; }
+
+        /* Sidebar Styling */
+        .sidebar {
+            width: 280px;
+            background: #1e293b;
+            border-right: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease, margin-left 0.3s ease;
+            z-index: 10;
+        }
+
+        .sidebar.hidden { margin-left: -280px; }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .sidebar-title { font-size: 1.1rem; font-weight: bold; color: #2563eb; }
+
+        .new-chat-btn {
+            padding: 10px;
+            background: #2563eb;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .new-chat-btn:hover { background: #1d4ed8; }
+
+        .history-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .history-item {
+            padding: 10px 14px;
+            background: #0f172a;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: #cbd5e1;
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            border: 1px solid transparent;
+            transition: 0.2s;
+        }
+
+        .history-item:hover {
+            background: #334155;
+            border-color: #2563eb;
+            color: #ffffff;
+        }
+
+        /* Main Chat Workspace */
+        .chat-container {
+            flex: 1;
+            height: 100vh;
+            background: #1e293b;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: #334155;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-bottom: 1px solid #475569;
+        }
+
+        .toggle-btn {
+            padding: 6px 12px;
+            background: #0f172a;
+            border: 1px solid #475569;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .toggle-btn:hover { background: #1e293b; }
+
+        .chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+        .message { max-width: 75%; padding: 12px 16px; border-radius: 12px; line-height: 1.5; font-size: 0.95rem; word-wrap: break-word; }
+        .user-message { align-self: flex-end; background: #2563eb; color: #ffffff; border-bottom-right-radius: 2px; }
+        .bot-message { align-self: flex-start; background: #334155; color: #f8fafc; border-bottom-left-radius: 2px; }
+
+        .input-area { display: flex; padding: 15px; background: #0f172a; border-top: 1px solid #334155; gap: 10px; }
+        input { flex: 1; padding: 12px 16px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: white; outline: none; font-size: 1rem; }
+        input:focus { border-color: #2563eb; }
+        button { padding: 12px 24px; background: #2563eb; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #1d4ed8; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <!-- Sidebar for History -->
+    <aside id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <span class="sidebar-title">Chat History</span>
+            <button class="new-chat-btn" onclick="startNewChat()">+ New Chat</button>
+        </div>
+        <div id="historyList" class="history-list">
+            <!-- Dynamically populated from /history -->
+        </div>
+    </aside>
+
+    <!-- Main Chat Workspace -->
+    <div class="chat-container">
+        <div class="chat-header">
+            <button class="toggle-btn" onclick="toggleSidebar()">☰</button>
+            <span>🤖 PiusAI Assistant</span>
+        </div>
+        
+        <div class="chat-box" id="chatBox">
+            <div class="message bot-message">Hello! I am Pius AI. How can I help you today?</div>
+        </div>
+
+        <div class="input-area">
+            <input type="text" id="userInput" placeholder="Type a message..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Load history when window finishes loading
+    window.addEventListener('DOMContentLoaded', fetchHistory);
+
+    // Fetch and display chat prompts in sidebar
+    async function fetchHistory() {
+        const historyList = document.getElementById("historyList");
+        try {
+            const response = await fetch("/history");
+            const data = await response.json();
+            historyList.innerHTML = "";
+
+            if (data.history && data.history.length > 0) {
+                data.history.forEach((msg, idx) => {
+                    if (msg.role === "user") {
+                        const item = document.createElement("div");
+                        item.className = "history-item";
+                        item.textContent = msg.content;
+                        item.onclick = () => loadSelectedChat(data.history, idx);
+                        historyList.appendChild(item);
+                    }
+                });
+            } else {
+                historyList.innerHTML = '<div style="color: #64748b; font-size: 0.85rem; padding: 10px; text-align: center;">No past conversations</div>';
+            }
+        } catch (error) {
+            console.error("Failed to load history:", error);
+        }
+    }
+
+    async function sendMessage() {
+        const inputField = document.getElementById("userInput");
+        const chatBox = document.getElementById("chatBox");
+        const prompt = inputField.value.trim();
+
+        if (!prompt) return;
+
+        // Display user message
+        const userDiv = document.createElement("div");
+        userDiv.className = "message user-message";
+        userDiv.textContent = prompt;
+        chatBox.appendChild(userDiv);
+
+        inputField.value = "";
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        // Display temporary loading message
+        const botDiv = document.createElement("div");
+        botDiv.className = "message bot-message";
+        botDiv.textContent = "Thinking...";
+        chatBox.appendChild(botDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        try {
+            const response = await fetch("/chat", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt: prompt })
+            });
+            const data = await response.json();
+            
+            // Render actual response or default to reply field
+            botDiv.textContent = data.reply || data.response;
+            
+            // Refresh sidebar list so newly saved user query appears
+            fetchHistory();
+        } catch (error) {
+            botDiv.textContent = "Error connecting to backend.";
+        }
+
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function handleKeyPress(event) {
+        if (event.key === "Enter") {
+            sendMessage();
+        }
+    }
+
+    function toggleSidebar() {
+        document.getElementById("sidebar").classList.toggle("hidden");
+    }
+
+    function startNewChat() {
+        const chatBox = document.getElementById("chatBox");
+        chatBox.innerHTML = '<div class="message bot-message">Hello! I am Pius AI. How can I help you today?</div>';
+    }
+
+    function loadSelectedChat(fullHistory, userMsgIndex) {
+        const chatBox = document.getElementById("chatBox");
+        chatBox.innerHTML = "";
+
+        // Re-render conversation up to chosen question and its reply
+        const userMessages = fullHistory.filter(m => m.role === "user");
+        const selectedMsg = userMessages[userMsgIndex];
+        const targetIndex = fullHistory.indexOf(selectedMsg);
+
+        for (let i = 0; i <= targetIndex + 1 && i < fullHistory.length; i++) {
+            const msg = fullHistory[i];
+            const div = document.createElement("div");
+            div.className = msg.role === "user" ? "message user-message" : "message bot-message";
+            div.textContent = msg.content;
+            chatBox.appendChild(div);
+        }
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+</script>
+
+</body>
+</html>
